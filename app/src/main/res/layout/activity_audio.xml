@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/linear_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <android.support.v7.widget.RecyclerView
+        android:id="@+id/recycler_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:scrollbars="vertical" />
+
+    <RelativeLayout
+        android:id="@+id/audio_view"
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:layout_gravity="bottom"
+        android:background="@color/vk_color"
+        android:gravity="center_vertical">
+
+        <SeekBar
+            android:id="@+id/seek_bar"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:layout_gravity="bottom"
+            android:layout_centerVertical="true" />
+
+        <ImageView
+            android:id="@+id/play_song"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_centerHorizontal="true"
+            android:layout_gravity="top"
+            android:clickable="true"vg
+            android:src="@drawable/ic_pause_black_24dp"
+            android:tint="@color/vk_white"/>
+
+        <ImageView
+            android:id="@+id/next_song"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_gravity="top"
+            android:layout_toEndOf="@+id/play_song"
+            android:clickable="true"
+            android:src="@drawable/ic_skip_next_black_24dp" />
+
+        <ImageView
+            android:id="@+id/prev_song"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_gravity="top"
+            android:layout_toStartOf="@+id/play_song"
+            android:clickable="true"
+            android:src="@drawable/ic_skip_previous_black_24dp" />
+
+        <TextView
+            android:id="@+id/current_time_song"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toEndOf="@+id/next_song"
+            android:paddingStart="5dp" />
+
+        <TextView
+            android:id="@+id/duration_song"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true" />
+    </RelativeLayout>
+</FrameLayout>

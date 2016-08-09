@@ -1,0 +1,28 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Container"
+    android:orientation="vertical"
+    tools:context=".activities.LoginActivity">
+
+    <android.support.v7.widget.SwitchCompat
+        android:id="@+id/monitored_switch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:layout_centerVertical="true"
+        android:layout_marginLeft="50dp"
+        android:checked="false"
+        android:text="Without SDK/WithSdk" />
+    <Button
+        android:id="@+id/button_vkontakte"
+        style="@style/Button"
+        android:layout_marginTop="16dp"
+        android:text="@string/using_app" />
+
+    <Button
+        android:id="@+id/logout"
+        style="@style/Button"
+        android:layout_marginTop="16dp"
+        android:text="@string/logout" />
+</LinearLayout>

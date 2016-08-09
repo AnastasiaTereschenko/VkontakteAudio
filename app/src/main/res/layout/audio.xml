@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/audioText"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true">
+        <TextView
+            android:id="@+id/nameAudio"
+            android:layout_width="280dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/text_color_name"
+            android:textSize="16sp"
+            android:layout_marginStart="20dp"
+            android:layout_marginBottom="7dp"
+            android:layout_marginTop="15dp"/>
+        <TextView
+            android:id="@+id/artistAudio"
+            android:layout_width="300dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:layout_marginStart="20dp"
+            android:layout_marginBottom="10dp"
+            android:layout_marginTop="1dp"
+            android:layout_below="@id/nameAudio"
+            android:textColor="@color/text_color_artist_duration"
+            android:textSize="13sp"/>
+        <TextView
+            android:layout_centerVertical="true"
+            android:id="@+id/durationAudio"
+            android:layout_width="40dp"
+            android:layout_height="match_parent"
+            android:layout_alignParentEnd="true"
+            android:textColor="@color/text_color_artist_duration"
+            android:paddingEnd="5dp"/>
+</RelativeLayout>
+
