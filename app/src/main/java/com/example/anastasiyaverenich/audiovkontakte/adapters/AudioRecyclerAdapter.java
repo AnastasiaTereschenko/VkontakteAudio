@@ -3,6 +3,7 @@ package com.example.anastasiyaverenich.audiovkontakte.adapters;
 import android.content.Context;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,7 +18,11 @@ import com.example.anastasiyaverenich.audiovkontakte.ui.OnLoadMoreListener;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import es.claucookie.miniequalizerlibrary.EqualizerView;
+
 public class AudioRecyclerAdapter extends RecyclerView.Adapter {
+    private static boolean isPlaying;
+    private static boolean isDestroy;
     private final Context mContext;
     private final int VIEW_PROG = 0;
     private final int VIEW_ITEM = 1;
@@ -28,6 +33,7 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
     private AudioItemClickListener listener;
     public OnLoadMoreListener onLoadMoreListener;
     List<Audio.Track> audios;
+    static int currentPosition = -1;
 
     public AudioRecyclerAdapter(Context context, int resource, List<Audio.Track> objects,
                                 RecyclerView recyclerView) {
@@ -94,10 +100,30 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
             audioViewHolder.artistAudio.setText(audio.getArtist());
             audioViewHolder.nameAudio.setText(audio.getTitle());
             audioViewHolder.durationAudio.setText(String.valueOf(durationAudioSecondsMinutes));
+            audioViewHolder.equalizerView.setVisibility(View.GONE);
+            if (currentPosition == position) {
+                //audioViewHolder.artistAudio.setWidth(20);
+                audioViewHolder.equalizerView.setVisibility(View.VISIBLE);
+                Log.d("TAG", String.valueOf(audioViewHolder.artistAudio.getWidth()));
+                if (isPlaying) {
+                    audioViewHolder.equalizerView.animateBars();
+                } else {
+                    if (isDestroy) {
+                        audioViewHolder.equalizerView.setVisibility(View.GONE);
+                    } else {
+                        audioViewHolder.equalizerView.stopBars();
+                    }
+                }
+            } else {
+                audioViewHolder.equalizerView.setVisibility(View.GONE);
+            }
             audioViewHolder.audioText.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    if (listener != null) listener.AudioItemClick(position);
+                    if (listener != null) {
+                        currentPosition = position;
+                        listener.AudioItemClick(position);
+                    }
                 }
             });
         } else if (holder instanceof ProgressViewHolder) {
@@ -128,6 +154,7 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
         TextView durationAudio;
         TextView artistAudio;
         RelativeLayout audioText;
+        EqualizerView equalizerView;
 
         public AudioViewHolder(View itemView) {
             super(itemView);
@@ -135,6 +162,7 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
             durationAudio = (TextView) itemView.findViewById(R.id.durationAudio);
             artistAudio = (TextView) itemView.findViewById(R.id.artistAudio);
             audioText = (RelativeLayout) itemView.findViewById(R.id.audioText);
+            equalizerView = (EqualizerView) itemView.findViewById(R.id.equalizer_view);
         }
     }
 
@@ -152,7 +180,17 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
     }
 
     public interface AudioItemClickListener {
-        void AudioItemClick(int position );
+        void AudioItemClick(int position);
+    }
+
+    public static void isPlayingAudio(boolean isPlayingAudio, boolean hideEqualizerView) {
+        isPlaying = isPlayingAudio;
+        isDestroy = hideEqualizerView;
+        Log.d("onReceive", String.valueOf(hideEqualizerView));
+    }
+
+    public static void setCurrentPosition(int position) {
+        currentPosition = position;
     }
 
 }

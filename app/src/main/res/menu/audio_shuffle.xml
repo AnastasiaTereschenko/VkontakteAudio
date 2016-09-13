@@ -7,6 +7,7 @@
         android:icon="@drawable/ic_shuffle_black_24dp"
         android:orderInCategory="100"
         android:title="shuffle"
+        android:tint = "@color/vk_white"
         app:showAsAction="always"
          />
 <!--    -->

@@ -2,11 +2,12 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/action_end"
+        android:id="@+id/action_logout"
         android:configChanges="keyboardHidden|orientation|screenSize|screenLayout"
-        android:icon="@drawable/ic_clear_black_24dp"
+        android:icon="@drawable/ic_exit_to_app_black_24dp"
         android:orderInCategory="100"
-        android:title="end"
+        android:title="@string/logout"
+        android:tint = "@color/vk_white"
         app:showAsAction="always"
         />
     <!--    -->

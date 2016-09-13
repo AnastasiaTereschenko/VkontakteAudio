@@ -1,42 +1,108 @@
 package com.example.anastasiyaverenich.audiovkontakte;
 
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
-import android.os.Binder;
+import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
 import android.os.PowerManager;
+import android.os.RemoteException;
 import android.support.annotation.Nullable;
+import android.support.v7.app.NotificationCompat;
 import android.util.Log;
 
-import com.example.anastasiyaverenich.audiovkontakte.modules.Audio;
+import com.example.anastasiyaverenich.audiovkontakte.activities.NotificationActivity;
+import com.example.anastasiyaverenich.audiovkontakte.application.AudioApplication;
 
-import java.util.List;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 
 public class MusicService extends Service implements
         MediaPlayer.OnPreparedListener, MediaPlayer.OnErrorListener,
-        MediaPlayer.OnCompletionListener {
-    //media player
+        MediaPlayer.OnCompletionListener, MediaPlayer.OnBufferingUpdateListener {
     private MediaPlayer player;
-    //song list
-    private List<Audio.Track> songs;
-    //current position
-    private int songPosn;
-    private final IBinder musicBind = new MusicBinder();
+    public int audioPosition;
+    int i;
+    String nameAudio;
+    NotificationCompat.Builder notificationBuilder = null;
+    final int NOTIFICATION_ID = 1;
+    NotificationManager notificationManager;
+    ArrayList<Messenger> clients = new ArrayList<Messenger>();
+    String titleAudio;
+    String artistAudio;
+    boolean isEndAudio;
+    int isNextOrPrev;
+    boolean isDestroy;
+    int secondProgress;
+    String urlAudio;
+    private Handler mHandler = new MessageHandler(this);
+    private static final int SHOW_PROGRESS = 1;
+    public static final int MSG_REGISTER_CLIENT = 1;
+    public static final int MSG_UNREGISTER_CLIENT = 2;
+    public static final int MSG_IS_PLAYING = 3;
+    public static final int MSG_PLAY = 4;
+    public static final int MSG_PAUSE = 5;
+    public static final int MSG_GET_POSITION_AND_DURATION = 6;
+    public static final int MSG_SEEK_TO = 7;
+    public static final int MSG_SET_URL_NAME_POSITION = 8;
+    public static final int MSG_IS_END = 9;
+    public static final int MSG_SET_SECONDARY_PROGRESS = 10;
+    public static final int MSG_IS_DESTROY = 11;
+    public static final int MSG_IS_TOGGLE_MEDIAPLAYER = 12;
+    public static final int MSG_UPDATE_UI_BY_TOGGLE = 13;
+    public static final int MSG_IS_DISMISS_NOTIFICATION = 14;
+    public static final int MSG_UPDATE_UI_BY_DISMISS_NOTIFICATION = 15;
+    public static final String ACTION_PLAY = "action_play";
+    public static final String ACTION_PAUSE = "action_pause";
+    public static final String ACTION_NEXT = "action_next";
+    public static final String ACTION_PREVIOUS = "action_previous";
 
     @Override
     public void onCreate() {
         super.onCreate();
         player = new MediaPlayer();
+        notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         initMusicPlayer();
-        songPosn = 0;
+        audioPosition = 0;
+        i = 0;
+    }
+
+    private void handleIntent(Intent intent) {
+        if (intent == null || intent.getAction() == null)
+            return;
+
+        String action = intent.getAction();
+
+        if (action.equalsIgnoreCase(ACTION_PLAY)) {
+            //playBackSong();
+            toggleMediaPlayer(true);
+        } else if (action.equalsIgnoreCase(ACTION_PAUSE)) {
+            //pauseSong();
+            toggleMediaPlayer(false);
+        } else if (action.equalsIgnoreCase(ACTION_PREVIOUS)) {
+            isEndAudio = true;
+            isNextOrPrev = 0;
+            sendOnCompletionEventToClients();
+        } else if (action.equalsIgnoreCase(ACTION_NEXT)) {
+            isEndAudio = true;
+            isNextOrPrev = 1;
+            sendOnCompletionEventToClients();
+        }
     }
 
     public void initMusicPlayer() {
-
         player.setWakeMode(getApplicationContext(),
                 PowerManager.PARTIAL_WAKE_LOCK);
+        player.setOnBufferingUpdateListener(this);
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
         player.setOnPreparedListener(this);
         player.setOnCompletionListener(this);
@@ -46,17 +112,20 @@ public class MusicService extends Service implements
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        return musicBind;
+        return mMessenger.getBinder();
     }
 
     @Override
     public void onCompletion(MediaPlayer mp) {
-
+        Log.d("TAG", "Completion");
+        isNextOrPrev = 1;
+        isEndAudio = true;
+        sendOnCompletionEventToClients();
     }
 
     @Override
     public boolean onError(MediaPlayer mp, int what, int extra) {
-        return false;
+        return true;
     }
 
     @Override
@@ -67,79 +136,261 @@ public class MusicService extends Service implements
     }
 
     @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        handleIntent(intent);
+        return super.onStartCommand(intent, flags, startId);
+    }
+
+    @Override
+    public void onBufferingUpdate(MediaPlayer mp, int percent) {
+        secondProgress = percent;
+        sendCurrentValueSecondaryProgress();
+    }
+
+    @Override
     public boolean onUnbind(Intent intent) {
         player.stop();
         player.release();
         return false;
     }
 
-    public void setList(List<Audio.Track> listAudio) {
-        songs = listAudio;
-    }
-
-    public class MusicBinder extends Binder {
-        public MusicService getService() {
-            return MusicService.this;
+    public void pauseSong(boolean isHideNotification) {
+        Bundle dataIsPlaying = new Bundle();
+        dataIsPlaying.putBoolean("valueIsPlaying", player.isPlaying());
+        Message msg = Message.obtain(null,
+                MSG_IS_PLAYING, 0, 0);
+        msg.setData(dataIsPlaying);
+        sendMessageToAllClients(msg);
+        player.pause();
+        buildNotification(generateAction(R.drawable.ic_play_arrow_black_24dp, " ", ACTION_PLAY));
+        mHandler.removeCallbacksAndMessages(null);
+        if (isHideNotification) {
+            notificationManager = (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            notificationManager.cancel(1);
         }
+        //MediaPlayerControl.getInstance().doUnbindService();
     }
 
-    public void pauseSong() {
+    public void toggleMediaPlayer(boolean isHideNotification) {
         if (player.isPlaying()) {
-            player.pause();
+            pauseSong(isHideNotification);
+        } else {
+            playBackSong();
         }
+        Bundle dataToggleMediaPlayer = new Bundle();
+        dataToggleMediaPlayer.putBoolean("valueIsToggle", player.isPlaying());
+        Message msg = Message.obtain(null,
+                MSG_UPDATE_UI_BY_TOGGLE, 0, 0);
+        msg.setData(dataToggleMediaPlayer);
+        sendMessageToAllClients(msg);
     }
 
     public void seekTo(int progress) {
         player.seekTo(progress);
     }
 
-    public boolean isPlaying() {
-        return player.isPlaying();
-    }
-
     public void playBackSong() {
+        mHandler.sendEmptyMessage(SHOW_PROGRESS);
         player.start();
+        buildNotification(generateAction(R.drawable.ic_pause_black_24dp, " ", ACTION_PAUSE));
     }
 
-    public void playSong() {
-        player.reset();
-        Audio.Track playSong = songs.get(songPosn);
-        try {
-            player.setDataSource(playSong.getUrl());
+    private NotificationCompat.Action generateAction(int icon, String title, String intentAction) {
+        Intent intent = new Intent(getApplicationContext(), MusicService.class);
+        intent.setAction(intentAction);
+        //intent.set
+        PendingIntent pendingIntent = PendingIntent.getService(getApplicationContext(), 1, intent, 0);
+        return new NotificationCompat.Action.Builder(icon, title, pendingIntent).build();
+    }
 
+    private PendingIntent createOnDismissedIntent(Context context, int notificationId) {
+        Intent intent = new Intent(context, NotificationDismissedReciever.class);
+        intent.putExtra("com.my.app.notificationId", notificationId);
+
+        PendingIntent pendingIntent =
+                PendingIntent.getBroadcast(context.getApplicationContext(),
+                        notificationId, intent, 0);
+        return pendingIntent;
+    }
+
+    public void buildNotification(NotificationCompat.Action action) {
+        NotificationCompat.MediaStyle style = new NotificationCompat.MediaStyle();
+        Intent intent = new Intent(this, NotificationDismissedReciever.class);
+        PendingIntent pi = PendingIntent.getBroadcast(this.getApplicationContext(), 0, intent, 0);
+        Bitmap bitmapIcon = BitmapFactory.decodeResource(getResources(), R.drawable.background_music);
+        notificationBuilder = (NotificationCompat.Builder) new NotificationCompat.Builder(this)
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setTicker(artistAudio + " " + titleAudio)
+                .setLargeIcon(bitmapIcon)
+                .setContentTitle(titleAudio)
+                .setContentText(artistAudio)
+                .setWhen(0)
+                .setStyle(style)
+                .setDeleteIntent(pi);
+        notificationBuilder.addAction(generateAction(R.drawable.ic_skip_previous_black_24dp, " ", ACTION_PREVIOUS));
+        notificationBuilder.addAction(action);
+        notificationBuilder.addAction(generateAction(R.drawable.ic_skip_next_black_24dp, " ", ACTION_NEXT));
+        style.setShowActionsInCompactView(0, 1, 2, 3, 4);
+        style.setShowCancelButton(true)
+                .setCancelButtonIntent(NotificationActivity.getDismissIntent(NOTIFICATION_ID, AudioApplication.get()));
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        notificationManager.notify(1, notificationBuilder.build());
+    }
+
+
+    public void playSong(String urlAudio) {
+        Bundle dataIsPlaying = new Bundle();
+        dataIsPlaying.putBoolean("valueIsPlaying", player.isPlaying());
+        Message msg = Message.obtain(null,
+                MSG_IS_PLAYING, 0, 0);
+        msg.setData(dataIsPlaying);
+        sendMessageToAllClients(msg);
+        isEndAudio = false;
+        isNextOrPrev = -1;
+        mHandler.sendEmptyMessage(SHOW_PROGRESS);
+        player.reset();
+        try {
+            player.setDataSource(urlAudio);
         } catch (Exception e) {
             Log.e("MUSIC SERVICE", "Error setting data source", e);
         }
         player.prepareAsync();
+        buildNotification(generateAction(R.drawable.ic_pause_black_24dp, " ", ACTION_PAUSE));
     }
 
-    public int getCurrentPosition() {
-        return player.getCurrentPosition();
+    public void setNameAudio(String songAndArtistAudio) {
+        nameAudio = songAndArtistAudio;
     }
 
-    public int getDuration() {
-        return player.getDuration();
-    }
+    class IncomingHandler extends Handler {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_REGISTER_CLIENT:
+                    clients.add(msg.replyTo);
+                    break;
+                case MSG_UNREGISTER_CLIENT:
+                    clients.remove(msg.replyTo);
+                    break;
+                case MSG_PLAY:
+                    playSong(urlAudio);
+                    break;
+                case MSG_PAUSE:
+                    player.stop();
+                    break;
+                case MSG_IS_DESTROY:
+                    Bundle dataIsDestroy = msg.getData();
+                    isDestroy = dataIsDestroy.getBoolean("valueIsDestroy");
+                case MSG_SEEK_TO:
+                    int newPosition = msg.arg1;
+                    seekTo(newPosition);
+                    break;
+                case MSG_SET_URL_NAME_POSITION:
+                    Bundle bundle = msg.getData();
+                    titleAudio = (String) bundle.get("titleAudio");
+                    Log.d("titleAudio Service", titleAudio);
+                    artistAudio = (String) bundle.get("artistAudio");
+                    Log.d("artistAudio Service", artistAudio);
+                    setNameAudio(titleAudio + artistAudio);
+                    urlAudio = (String) bundle.get("valueUrl");
+                    Log.d("valueUrl Service", urlAudio);
+                    break;
+                case MSG_IS_PLAYING:
+                    Bundle dataIsPlaying = new Bundle();
+                    dataIsPlaying.putBoolean("valueIsPlaying", player.isPlaying());
+                    msg = Message.obtain(null,
+                            MSG_IS_PLAYING, 0, 0);
+                    msg.setData(dataIsPlaying);
+                    sendMessageToAllClients(msg);
+                    break;
+                case MSG_IS_TOGGLE_MEDIAPLAYER:
+                    toggleMediaPlayer(true);
+                    break;
+                case MSG_IS_DISMISS_NOTIFICATION:
+                    dismissNotification();
+                    break;
 
-    public void playNextOrPrevSong() {
-        // player.stop();
-        player.reset();
-        Audio.Track playSong;
-        playSong = songs.get(songPosn);
-        try {
-            player.setDataSource(playSong.getUrl());
-
-        } catch (Exception e) {
-            Log.e("MUSIC SERVICE", "Error setting data source", e);
+            }
         }
-        player.prepareAsync();
-        player.start();
     }
-
-    public void setSong(int songIndex) {
-        songPosn = songIndex;
-    }
-
+private void dismissNotification(){
+        Message msg = Message.obtain(null,
+                MusicService.MSG_UPDATE_UI_BY_DISMISS_NOTIFICATION, 0, 0);
+        sendMessageToAllClients(msg);
 
 }
+    private void sendCurrentValueSecondaryProgress() {
+        Message msg;
+        Bundle dataSetProgress = new Bundle();
+        dataSetProgress.putInt("valueSetSecondProgress", secondProgress);
+        msg = Message.obtain(null,
+                MSG_SET_SECONDARY_PROGRESS, secondProgress, 0);
+        msg.setData(dataSetProgress);
+        sendMessageToAllClients(msg);
+    }
 
+    private void sendOnCompletionEventToClients() {
+        buildNotification(generateAction(R.drawable.ic_pause_black_24dp, " ", ACTION_PAUSE));
+        Message msg;
+        Bundle dataIsEnd = new Bundle();
+        dataIsEnd.putBoolean("valueIsEndAudio", isEndAudio);
+        msg = Message.obtain(null, MSG_IS_END, isNextOrPrev, 0, isEndAudio);
+        msg.setData(dataIsEnd);
+        sendMessageToAllClients(msg);
+    }
+
+    private void sendMessageToAllClients(Message message) {
+        for (int i = clients.size() - 1; i >= 0; i--) {
+            try {
+                clients.get(i).send(Message.obtain(message));
+            } catch (RemoteException e) {
+                clients.remove(i);
+            }
+        }
+    }
+
+    private void sendCurrentMediaPlayerStatusToClients() {
+        Message msg;
+        if (player == null) {
+            return;
+        }
+        int positionProgressBar = player.getCurrentPosition();
+        int durationProgressBar = player.getDuration();
+        for (int i = clients.size() - 1; i >= 0; i--) {
+            try {
+                msg = Message.obtain(null,
+                        MSG_GET_POSITION_AND_DURATION, positionProgressBar, durationProgressBar);
+                clients.get(i).send(Message.obtain(msg));
+            } catch (RemoteException e) {
+                clients.remove(i);
+            }
+        }
+    }
+
+    final Messenger mMessenger = new Messenger(new IncomingHandler());
+
+    private static class MessageHandler extends Handler {
+        private final WeakReference<MusicService> mService;
+
+        MessageHandler(MusicService service) {
+            mService = new WeakReference<MusicService>(service);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            MusicService service = mService.get();
+            if (service == null || service.isDestroy) {
+                service.isDestroy = false;
+                return;
+            }
+            switch (msg.what) {
+                case SHOW_PROGRESS:
+                    service.sendCurrentMediaPlayerStatusToClients();
+                    msg = obtainMessage(SHOW_PROGRESS);
+                    sendMessageDelayed(msg, 500);
+                    break;
+            }
+        }
+    }
+
+}

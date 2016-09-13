@@ -13,7 +13,6 @@ import android.widget.Switch;
 import android.widget.Toast;
 
 import com.example.anastasiyaverenich.audiovkontakte.R;
-import com.vk.sdk.VKAccessToken;
 import com.vk.sdk.VKCallback;
 import com.vk.sdk.VKScope;
 import com.vk.sdk.VKSdk;
@@ -25,6 +24,7 @@ public class LoginActivity extends FragmentActivity implements CompoundButton.On
             VKScope.AUDIO
     };
     public static boolean useAudioVkontakteWithSdk;
+    int isOpenLogoutFragment = -1;
     public Switch mSwitch;
 
     @Override
@@ -34,13 +34,23 @@ public class LoginActivity extends FragmentActivity implements CompoundButton.On
         VKSdk.wakeUpSession(this, new VKCallback<VKSdk.LoginState>() {
             @Override
             public void onResult(VKSdk.LoginState res) {
+                Log.d("TAG", "onResult");
+                Log.d("TAG", String.valueOf(res));
                 if (isResumed) {
                     switch (res) {
                         case LoggedOut:
                             showLogin();
                             break;
                         case LoggedIn:
-                            showLogout();
+                            if (isOpenLogoutFragment == 1) {
+                                showLogout();
+                                isOpenLogoutFragment = -1;
+                            } else if (isOpenLogoutFragment == 2) {
+                                finish();
+                            } else {
+                                LoginActivity.useAudioVkontakteWithSdk = true;
+                                startAudioActivity();
+                            }
                             break;
                         case Pending:
                             break;
@@ -81,9 +91,18 @@ public class LoginActivity extends FragmentActivity implements CompoundButton.On
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d("TAG", "onResume");
         isResumed = true;
         if (VKSdk.isLoggedIn()) {
-            showLogout();
+            if (isOpenLogoutFragment == 1) {
+                showLogout();
+                isOpenLogoutFragment = -1;
+            } else if (isOpenLogoutFragment == 2) {
+                finish();
+            } else {
+                LoginActivity.useAudioVkontakteWithSdk = true;
+                startAudioActivity();
+            }
         } else {
             showLogin();
         }
@@ -100,11 +119,11 @@ public class LoginActivity extends FragmentActivity implements CompoundButton.On
         super.onDestroy();
     }
 
-    private void startAudioActivity(boolean useAudioVkontakteWithSdk) {
+    private void startAudioActivity() {
         Intent i = new Intent(getApplicationContext(), AudioActivity.class);
-        //i.putExtra("key", useAudioVkontakteWithSdk);
-        startActivity(i);
-        //startActivity(new Intent(this, AudioActivity.class));
+        i.putExtra("key", useAudioVkontakteWithSdk);
+        startActivityForResult(i, 1);
+        //startActivity(i);
     }
 
     public static class LoginFragment extends android.support.v4.app.Fragment {
@@ -134,76 +153,26 @@ public class LoginActivity extends FragmentActivity implements CompoundButton.On
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
             final View v = inflater.inflate(R.layout.fragment_logout, container, false);
-            //Switch mSwitch = (Switch) v.findViewById(R.id.monitored_switch);
             final SwitchCompat mSwitch = (SwitchCompat) v.findViewById(R.id.monitored_switch);
-            // устанавливаем переключатель программно в значение ON
             mSwitch.setChecked(true);
-            // добавляем слушателя\
-            if (mSwitch.getTextOff() == "off") {
-                v.findViewById(R.id.button_vkontakte).setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        //LoginActivity.useAudioVkontakteWithSdk = false;
-                        ((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
-                    }
-                });
+            if (!mSwitch.isActivated()) {
+                playAudioWithSdk((LoginActivity) getActivity(), v);
 
             } else {
-                v.findViewById(R.id.button_vkontakte).setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        //LoginActivity.useAudioVkontakteWithSdk = true;
-                        ((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
-                    }
-                });
+                playAudioWithoutSdk((LoginActivity) getActivity(), v);
             }
             mSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton buttonView, final boolean isChecked) {
-                    // в зависимости от значения isChecked выводим нужное сообщение
                     if (isChecked) {
-                        Toast.makeText(getActivity(), "SET ON", Toast.LENGTH_SHORT).show();
-                        LoginActivity.useAudioVkontakteWithSdk = true;
-                        //((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
-                        v.findViewById(R.id.button_vkontakte).setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                //LoginActivity.useAudioVkontakteWithSdk = true;
-                                ((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
-                            }
-                        });
-                        //mSwitch.setChecked(false);
-                        //mSwitch.setChecked(false);
+                        playAudioWithSdk((LoginActivity) getActivity(), v);
+
 
                     } else {
-                        Toast.makeText(getActivity(), "SET OFF", Toast.LENGTH_SHORT).show();
-                        LoginActivity.useAudioVkontakteWithSdk = false;
-                        v.findViewById(R.id.button_vkontakte).setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                //LoginActivity.useAudioVkontakteWithSdk = false;
-                                ((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
-                            }
-                        });
-                        //Switch.setChecked(true);
-                        //mSwitch.setChecked(false);
+                        playAudioWithoutSdk((LoginActivity) getActivity(), v);
                     }
                 }
             });
-          /*  v.findViewById(R.id.button_vkontakte_sdk).setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    LoginActivity.useAudioVkontakteWithSdk = true;
-                    ((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
-                }
-            });
-            v.findViewById(R.id.button_vkontakte).setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    LoginActivity.useAudioVkontakteWithSdk = false;
-                    ((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
-                }
-            }); */
 
             v.findViewById(R.id.logout).setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -219,25 +188,46 @@ public class LoginActivity extends FragmentActivity implements CompoundButton.On
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        VKCallback<VKAccessToken> callback = new VKCallback<VKAccessToken>() {
-            @Override
-            public void onResult(VKAccessToken res) {
-                // User passed Authorization
+    protected void onActivityResult(int requestCode, int resultCode, final Intent data) {
+
+        Log.d("TAG", "onActivityResult");
+        if (data == null) {
+            return;
+        }
+        isOpenLogoutFragment = data.getIntExtra("date", isOpenLogoutFragment);
+        Log.d("TAG", String.valueOf(isOpenLogoutFragment));
+
+        // User passed Authorization
                /* LoginActivity.useAudioVkontakteWithSdk = true;
                 startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);*/
-                showLogout();
-            }
+        //LoginActivity.useAudioVkontakteWithSdk = true;
+        //startAudioActivity();
+        //showLogout();
+    }
 
+    private static void playAudioWithSdk(final LoginActivity actiyity, View v) {
+        //Toast.makeText(actiyity, "SET ON", Toast.LENGTH_SHORT).show();
+        LoginActivity.useAudioVkontakteWithSdk = true;
+        //((LoginActivity) getActivity()).startAudioActivity(LoginActivity.useAudioVkontakteWithSdk);
+        v.findViewById(R.id.button_vkontakte).setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onError(VKError error) {
-                // User didn't pass Authorization
+            public void onClick(View view) {
+                actiyity.startAudioActivity();
             }
-        };
+        });
+    }
 
-        if (!VKSdk.onActivityResult(requestCode, resultCode, data, callback)) {
-            super.onActivityResult(requestCode, resultCode, data);
-        }
+    private static void playAudioWithoutSdk(final LoginActivity actiyity, View v) {
+        Toast.makeText(actiyity, "SET OFF", Toast.LENGTH_SHORT).show();
+        LoginActivity.useAudioVkontakteWithSdk = false;
+        v.findViewById(R.id.button_vkontakte).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                //LoginActivity.useAudioVkontakteWithSdk = false;
+                actiyity.startAudioActivity();
+            }
+        });
+
     }
 
 }
