@@ -35,10 +35,10 @@
             android:excludeFromRecents="true">
         </activity>
         <service
-            android:name=".MusicService">
+            android:name=".service.MusicService">
         </service>
         <receiver
-            android:name=".NotificationDismissedReciever"
+            android:name=".receiver.NotificationDismissedReceiver"
             android:exported="false" >
         </receiver>
     </application>

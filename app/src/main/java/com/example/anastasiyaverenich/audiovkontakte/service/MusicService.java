@@ -1,4 +1,4 @@
-package com.example.anastasiyaverenich.audiovkontakte;
+package com.example.anastasiyaverenich.audiovkontakte.service;
 
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -20,8 +20,10 @@ import android.support.annotation.Nullable;
 import android.support.v7.app.NotificationCompat;
 import android.util.Log;
 
+import com.example.anastasiyaverenich.audiovkontakte.R;
 import com.example.anastasiyaverenich.audiovkontakte.activities.NotificationActivity;
 import com.example.anastasiyaverenich.audiovkontakte.application.AudioApplication;
+import com.example.anastasiyaverenich.audiovkontakte.receiver.NotificationDismissedReceiver;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -44,23 +46,21 @@ public class MusicService extends Service implements
     boolean isDestroy;
     int secondProgress;
     String urlAudio;
-    private Handler mHandler = new MessageHandler(this);
+    private Handler handler = new MessageHandler(this);
     private static final int SHOW_PROGRESS = 1;
     public static final int MSG_REGISTER_CLIENT = 1;
     public static final int MSG_UNREGISTER_CLIENT = 2;
-    public static final int MSG_IS_PLAYING = 3;
-    public static final int MSG_PLAY = 4;
-    public static final int MSG_PAUSE = 5;
-    public static final int MSG_GET_POSITION_AND_DURATION = 6;
-    public static final int MSG_SEEK_TO = 7;
-    public static final int MSG_SET_URL_NAME_POSITION = 8;
-    public static final int MSG_IS_END = 9;
-    public static final int MSG_SET_SECONDARY_PROGRESS = 10;
-    public static final int MSG_IS_DESTROY = 11;
-    public static final int MSG_IS_TOGGLE_MEDIAPLAYER = 12;
-    public static final int MSG_UPDATE_UI_BY_TOGGLE = 13;
-    public static final int MSG_IS_DISMISS_NOTIFICATION = 14;
-    public static final int MSG_UPDATE_UI_BY_DISMISS_NOTIFICATION = 15;
+    public static final int MSG_PAUSE = 3;
+    public static final int MSG_GET_POSITION_AND_DURATION = 4;
+    public static final int MSG_SEEK_TO = 5;
+    public static final int MSG_SET_URL_NAME_POSITION_AND_PLAY_AUDIO = 6;
+    public static final int MSG_IS_END = 7;
+    public static final int MSG_SET_SECONDARY_PROGRESS = 8;
+    public static final int MSG_IS_TERMINATE_STATE = 9;
+    public static final int MSG_IS_TOGGLE_MEDIAPLAYER = 10;
+    public static final int MSG_UPDATE_UI_BY_TOGGLE = 11;
+    public static final int MSG_IS_PLAYING = 12;
+    //public static final int MSG_UPDATE_UI_BY_DISMISS_NOTIFICATION_AND_END_OF_LIST = 12;
     public static final String ACTION_PLAY = "action_play";
     public static final String ACTION_PAUSE = "action_pause";
     public static final String ACTION_NEXT = "action_next";
@@ -83,17 +83,13 @@ public class MusicService extends Service implements
         String action = intent.getAction();
 
         if (action.equalsIgnoreCase(ACTION_PLAY)) {
-            //playBackSong();
             toggleMediaPlayer(true);
         } else if (action.equalsIgnoreCase(ACTION_PAUSE)) {
-            //pauseSong();
             toggleMediaPlayer(false);
         } else if (action.equalsIgnoreCase(ACTION_PREVIOUS)) {
-            isEndAudio = true;
             isNextOrPrev = 0;
             sendOnCompletionEventToClients();
         } else if (action.equalsIgnoreCase(ACTION_NEXT)) {
-            isEndAudio = true;
             isNextOrPrev = 1;
             sendOnCompletionEventToClients();
         }
@@ -132,7 +128,12 @@ public class MusicService extends Service implements
     public void onPrepared(MediaPlayer mp) {
         Log.d("TAG", "Prepared");
         mp.start();
+        startProgressHandler();
+    }
 
+    private void startProgressHandler() {
+        handler.removeCallbacksAndMessages(null);
+        handler.sendEmptyMessage(SHOW_PROGRESS);
     }
 
     @Override
@@ -149,26 +150,19 @@ public class MusicService extends Service implements
 
     @Override
     public boolean onUnbind(Intent intent) {
-        player.stop();
-        player.release();
+        //player.stop();
+        //player.release();
         return false;
     }
 
     public void pauseSong(boolean isHideNotification) {
-        Bundle dataIsPlaying = new Bundle();
-        dataIsPlaying.putBoolean("valueIsPlaying", player.isPlaying());
-        Message msg = Message.obtain(null,
-                MSG_IS_PLAYING, 0, 0);
-        msg.setData(dataIsPlaying);
-        sendMessageToAllClients(msg);
         player.pause();
         buildNotification(generateAction(R.drawable.ic_play_arrow_black_24dp, " ", ACTION_PLAY));
-        mHandler.removeCallbacksAndMessages(null);
+        handler.removeCallbacksAndMessages(null);
         if (isHideNotification) {
             notificationManager = (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
             notificationManager.cancel(1);
         }
-        //MediaPlayerControl.getInstance().doUnbindService();
     }
 
     public void toggleMediaPlayer(boolean isHideNotification) {
@@ -190,8 +184,8 @@ public class MusicService extends Service implements
     }
 
     public void playBackSong() {
-        mHandler.sendEmptyMessage(SHOW_PROGRESS);
         player.start();
+        startProgressHandler();
         buildNotification(generateAction(R.drawable.ic_pause_black_24dp, " ", ACTION_PAUSE));
     }
 
@@ -204,7 +198,7 @@ public class MusicService extends Service implements
     }
 
     private PendingIntent createOnDismissedIntent(Context context, int notificationId) {
-        Intent intent = new Intent(context, NotificationDismissedReciever.class);
+        Intent intent = new Intent(context, NotificationDismissedReceiver.class);
         intent.putExtra("com.my.app.notificationId", notificationId);
 
         PendingIntent pendingIntent =
@@ -215,7 +209,7 @@ public class MusicService extends Service implements
 
     public void buildNotification(NotificationCompat.Action action) {
         NotificationCompat.MediaStyle style = new NotificationCompat.MediaStyle();
-        Intent intent = new Intent(this, NotificationDismissedReciever.class);
+        Intent intent = new Intent(this, NotificationDismissedReceiver.class);
         PendingIntent pi = PendingIntent.getBroadcast(this.getApplicationContext(), 0, intent, 0);
         Bitmap bitmapIcon = BitmapFactory.decodeResource(getResources(), R.drawable.background_music);
         notificationBuilder = (NotificationCompat.Builder) new NotificationCompat.Builder(this)
@@ -237,18 +231,13 @@ public class MusicService extends Service implements
         notificationManager.notify(1, notificationBuilder.build());
     }
 
-
     public void playSong(String urlAudio) {
-        Bundle dataIsPlaying = new Bundle();
-        dataIsPlaying.putBoolean("valueIsPlaying", player.isPlaying());
-        Message msg = Message.obtain(null,
-                MSG_IS_PLAYING, 0, 0);
-        msg.setData(dataIsPlaying);
-        sendMessageToAllClients(msg);
-        isEndAudio = false;
         isNextOrPrev = -1;
-        mHandler.sendEmptyMessage(SHOW_PROGRESS);
-        player.reset();
+        if (player == null) {
+            player = new MediaPlayer();
+        } else {
+            player.reset();
+        }
         try {
             player.setDataSource(urlAudio);
         } catch (Exception e) {
@@ -272,20 +261,19 @@ public class MusicService extends Service implements
                 case MSG_UNREGISTER_CLIENT:
                     clients.remove(msg.replyTo);
                     break;
-                case MSG_PLAY:
-                    playSong(urlAudio);
-                    break;
                 case MSG_PAUSE:
                     player.stop();
                     break;
-                case MSG_IS_DESTROY:
-                    Bundle dataIsDestroy = msg.getData();
-                    isDestroy = dataIsDestroy.getBoolean("valueIsDestroy");
+                case MSG_IS_TERMINATE_STATE:
+                    terminateState();
+                    //Bundle dataIsDestroy = msg.getData();
+                    //isDestroy = dataIsDestroy.getBoolean("valueIsDestroy");
+                    break;
                 case MSG_SEEK_TO:
                     int newPosition = msg.arg1;
                     seekTo(newPosition);
                     break;
-                case MSG_SET_URL_NAME_POSITION:
+                case MSG_SET_URL_NAME_POSITION_AND_PLAY_AUDIO:
                     Bundle bundle = msg.getData();
                     titleAudio = (String) bundle.get("titleAudio");
                     Log.d("titleAudio Service", titleAudio);
@@ -294,31 +282,28 @@ public class MusicService extends Service implements
                     setNameAudio(titleAudio + artistAudio);
                     urlAudio = (String) bundle.get("valueUrl");
                     Log.d("valueUrl Service", urlAudio);
-                    break;
-                case MSG_IS_PLAYING:
-                    Bundle dataIsPlaying = new Bundle();
-                    dataIsPlaying.putBoolean("valueIsPlaying", player.isPlaying());
-                    msg = Message.obtain(null,
-                            MSG_IS_PLAYING, 0, 0);
-                    msg.setData(dataIsPlaying);
-                    sendMessageToAllClients(msg);
+                    playSong(urlAudio);
                     break;
                 case MSG_IS_TOGGLE_MEDIAPLAYER:
                     toggleMediaPlayer(true);
                     break;
-                case MSG_IS_DISMISS_NOTIFICATION:
-                    dismissNotification();
+                case MSG_IS_PLAYING:
                     break;
-
             }
         }
     }
-private void dismissNotification(){
-        Message msg = Message.obtain(null,
-                MusicService.MSG_UPDATE_UI_BY_DISMISS_NOTIFICATION, 0, 0);
-        sendMessageToAllClients(msg);
 
-}
+    public void terminateState() {
+        Log.d("terminateState", "stop");
+        player.release();
+        player = null;
+        handler.removeCallbacksAndMessages(null);
+    }
+
+    public void stateMediaPlayer() {
+
+    }
+
     private void sendCurrentValueSecondaryProgress() {
         Message msg;
         Bundle dataSetProgress = new Bundle();
@@ -354,6 +339,11 @@ private void dismissNotification(){
         if (player == null) {
             return;
         }
+        if (clients.size() == 0) {
+            Log.d("terminateState", String.valueOf(clients.size()));
+            //terminateState();
+            return;
+        }
         int positionProgressBar = player.getCurrentPosition();
         int durationProgressBar = player.getDuration();
         for (int i = clients.size() - 1; i >= 0; i--) {
@@ -379,8 +369,7 @@ private void dismissNotification(){
         @Override
         public void handleMessage(Message msg) {
             MusicService service = mService.get();
-            if (service == null || service.isDestroy) {
-                service.isDestroy = false;
+            if (service == null) {
                 return;
             }
             switch (msg.what) {

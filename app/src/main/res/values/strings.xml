@@ -5,4 +5,8 @@
     <string name="using_app_sdk">Using audio vkontakte with sdk</string>
     <string name="using_app">Play</string>
     <string name="logout">Logout</string>
+    <string name="background_image_str">Background image for album art</string>
+    <string name="skip_prev">Skip to prev</string>
+    <string name="play_pause">Play or pause</string>
+    <string name="skip_next">Skip to next</string>
 </resources>

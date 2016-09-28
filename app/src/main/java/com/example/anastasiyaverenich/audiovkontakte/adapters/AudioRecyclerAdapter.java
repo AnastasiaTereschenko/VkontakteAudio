@@ -34,6 +34,7 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
     public OnLoadMoreListener onLoadMoreListener;
     List<Audio.Track> audios;
     static int currentPosition = -1;
+    public boolean isLastLoaded;
 
     public AudioRecyclerAdapter(Context context, int resource, List<Audio.Track> objects,
                                 RecyclerView recyclerView) {
@@ -127,7 +128,9 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
                 }
             });
         } else if (holder instanceof ProgressViewHolder) {
-            ((ProgressViewHolder) holder).progressBar.setIndeterminate(true);
+            if (!isLastLoaded) {
+                ((ProgressViewHolder) holder).progressBar.setIndeterminate(true);
+            }
         }
     }
 
@@ -183,13 +186,13 @@ public class AudioRecyclerAdapter extends RecyclerView.Adapter {
         void AudioItemClick(int position);
     }
 
-    public static void isPlayingAudio(boolean isPlayingAudio, boolean hideEqualizerView) {
+    public void isPlayingAudio(boolean isPlayingAudio, boolean hideEqualizerView) {
         isPlaying = isPlayingAudio;
         isDestroy = hideEqualizerView;
         Log.d("onReceive", String.valueOf(hideEqualizerView));
     }
 
-    public static void setCurrentPosition(int position) {
+    public void setCurrentPosition(int position) {
         currentPosition = position;
     }
 

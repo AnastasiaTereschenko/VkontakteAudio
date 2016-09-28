@@ -1,30 +1,29 @@
 package com.example.anastasiyaverenich.audiovkontakte.activities;
 
-import android.app.NotificationManager;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Message;
+import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import com.example.anastasiyaverenich.audiovkontakte.MediaPlayerControlInterface;
 import com.example.anastasiyaverenich.audiovkontakte.R;
 import com.example.anastasiyaverenich.audiovkontakte.adapters.AudioRecyclerAdapter;
-import com.example.anastasiyaverenich.audiovkontakte.application.MediaPlayerControl;
-import com.example.anastasiyaverenich.audiovkontakte.application.MediaPlayerLoader;
+import com.example.anastasiyaverenich.audiovkontakte.fragments.DetailsAudioFragment;
+import com.example.anastasiyaverenich.audiovkontakte.interfaces.MediaPlayerControlInterface;
 import com.example.anastasiyaverenich.audiovkontakte.modules.Audio;
+import com.example.anastasiyaverenich.audiovkontakte.modules.MediaPlayerState;
+import com.example.anastasiyaverenich.audiovkontakte.singleton.MediaPlayerControl;
+import com.example.anastasiyaverenich.audiovkontakte.singleton.MediaPlayerLoader;
+import com.example.anastasiyaverenich.audiovkontakte.singleton.MediaPlayerSetUi;
 import com.example.anastasiyaverenich.audiovkontakte.ui.OnLoadMoreListener;
 
 import java.util.ArrayList;
@@ -33,6 +32,7 @@ import java.util.List;
 import java.util.Locale;
 
 public class AudioActivity extends AppCompatActivity implements View.OnClickListener, MediaPlayerControlInterface {
+    public static int INIT_CURRENT_POSITION = -1;
     List<Audio.Track> listAudio = new ArrayList<>();
     RecyclerView recyclerView;
     LinearLayoutManager linearLayoutManager;
@@ -40,26 +40,25 @@ public class AudioActivity extends AppCompatActivity implements View.OnClickList
     public RelativeLayout audioView;
     public int currentPosition = -1;
     ImageView playOrStopSong;
-    int pressedPosition;
     SeekBar seekBar;
-    Formatter mFormatter;
-    StringBuilder mFormatBuilder;
+    Formatter formatter;
+    StringBuilder formatBuilder;
     TextView nameAudio, artistAudio;
-    public boolean isEnd;
-    int iPos = 0;
-    int currentPercent = 0;
-    int position;
-    int duration;
-    Message msg;
-    public Intent playIntent;
-    public static final String ACTION_NEXT = "action_next";
-    public static final String ACTION_PREVIOUS = "action_previous";
     public boolean isDestroy;
+    private MediaPlayerLoader mediaPlayerLoader;
+    private MediaPlayerSetUi mediaPlayerSetUi;
+    private MediaPlayerControl mediaPlayerControl;
+    DetailsAudioFragment detailsAudioFragment;
+    int positionInFragment = -1;
+    int pressedPosition;
+    MediaPlayerState mediaPlayerState;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.d("TAG", "onCreate");
         setContentView(R.layout.activity_audio);
+        mediaPlayerState = new MediaPlayerState();
         playOrStopSong = (ImageView) findViewById(R.id.play_song);
         recyclerView = (RecyclerView) findViewById(R.id.recycler_view);
         audioView = (RelativeLayout) findViewById(R.id.audio_view);
@@ -69,66 +68,125 @@ public class AudioActivity extends AppCompatActivity implements View.OnClickList
         playOrStopSong.setOnClickListener(this);
         seekBar.setOnSeekBarChangeListener(MediaPlayerControl.getInstance().seekListener);
         seekBar.setMax(1000);
-        hideOrShowAudioView(View.INVISIBLE);
         linearLayoutManager = new LinearLayoutManager(this);
         recyclerView.setLayoutManager(linearLayoutManager);
-        mFormatBuilder = new StringBuilder();
-        mFormatter = new Formatter(mFormatBuilder, Locale.getDefault());
+        formatBuilder = new StringBuilder();
+        formatter = new Formatter(formatBuilder, Locale.getDefault());
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(false);
         }
         initAdapter();
+        mediaPlayerControl = MediaPlayerControl.getInstance();
+        mediaPlayerSetUi = MediaPlayerSetUi.getInstance();
+        mediaPlayerLoader = MediaPlayerLoader.getInstance();
+        mediaPlayerLoader.addCallback(mediaPlayerLoaderCallback);
         if (LoginActivity.useAudioVkontakteWithSdk)
-            MediaPlayerLoader.getInstance().getResponse(15, 0, listAudio, adapter);
+            mediaPlayerLoader.getResponse(15, 0);
         else {
-            MediaPlayerLoader.getInstance().loadingAudio(listAudio, adapter);
+            mediaPlayerLoader.loadingAudio();
         }
-        MediaPlayerControl.getInstance().subscribeToUpdatesFromSingleton(this);
+        mediaPlayerControl.subscribeToUpdatesFromMediaPlayerControl(this);
+
         adapter.setOnLoadMoreListener(new OnLoadMoreListener() {
             @Override
             public void onLoadMore() {
-                MediaPlayerLoader.getInstance().loadMore(listAudio, adapter);
+                Handler handler = new Handler();
+                final Runnable r = new Runnable() {
+                    public void run() {
+                        listAudio.add(null);
+                        adapter.notifyDataSetChanged();
+                    }
+                };
+                handler.post(r);
+                mediaPlayerLoader.loadMore();
+//                if (listAudio.size() != 0) {
+//                    if ((listAudio.get(listAudio.size() - 1)) == null) {
+//                        listAudio.remove(listAudio.size() - 1);
+//                        //adapter.notifyDataSetChanged();
+//                        //adapter.notifyItemRemoved(listAudio.size());
+//                    }
+//                }
             }
         });
         audioView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                positionInFragment = mediaPlayerControl.getCurrentPosition();
+                detailsAudioFragment = new DetailsAudioFragment(positionInFragment, listAudio, adapter);
                 getSupportFragmentManager()
                         .beginTransaction()
-                        .replace(R.id.linear_layout, new AudioFragment())
+                        .replace(R.id.linear_layout, detailsAudioFragment)
                         .commit();
             }
         });
         adapter.setListener(new AudioRecyclerAdapter.AudioItemClickListener() {
                                 @Override
                                 public void AudioItemClick(int position) {
-                                    setNameAndArtistAudio(position);
                                     pressedPosition = position;
-                                    if (currentPosition == position) {
-                                        MediaPlayerControl.getInstance().isToggleMediaPlayer();
-                                    } else {
-                                        hideOrShowAudioView(View.VISIBLE);
-                                        AudioRecyclerAdapter.isPlayingAudio(true, false);
-                                        MediaPlayerControl.getInstance().songPicked(listAudio, position);
-                                        playOrStopSong.setImageResource(R.drawable.ic_pause_black_24dp);
-                                    }
-                                    adapter.notifyDataSetChanged();
-                                    currentPosition = position;
+                                    hideOrShowAudioView(View.VISIBLE);
+                                    mediaPlayerControl.updatePosition(position);
+                                    updateUiByToggle(true);
+                                    adapter.setCurrentPosition(position);
+                                    mediaPlayerControl.setAndPlayAudio();
+                                    setNameAndArtistAudio(listAudio, position);
                                 }
                             }
         );
+        if (mediaPlayerState.getIsSetAudio()) {
+            if (!mediaPlayerState.getIsPlaying()) {
+                adapter.isPlayingAudio(false, false);
+                playOrStopSong.setImageResource(R.drawable.ic_play_arrow_black_24dp);
+                Log.d("positionOfSong", String.valueOf(mediaPlayerControl.getCurrentPosition()));
+            }
+            hideOrShowAudioView(View.VISIBLE);
+            setNameAndArtistAudio(mediaPlayerLoader.listAudio,
+                    mediaPlayerState.getPosition());
+            setProgress(mediaPlayerState.getPositionSeekBar(), mediaPlayerControl.duration);
+        } else {
+            hideOrShowAudioView(View.INVISIBLE);
+        }
+
     }
 
-    private void hideOrShowAudioView(int invisible) {
+    @Override
+    public void onPause() {
+        super.onPause();
+        Log.d("TAG", "onPause");
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        Log.d("TAG", "onResume");
+    }
+
+    public void hideOrShowAudioView(int invisible) {
         audioView.setVisibility(invisible);
     }
 
-    public void setNameAndArtistAudio(int position) {
-        String artistAudioPos = listAudio.get(position).getArtist();
-        String nameAudioPos = listAudio.get(position).getTitle();
-        artistAudio.setText(artistAudioPos);
-        nameAudio.setText(nameAudioPos);
-    }
+    private MediaPlayerLoader.MediaPlayerLoaderCallback mediaPlayerLoaderCallback
+            = new MediaPlayerLoader.MediaPlayerLoaderCallback() {
+        @Override
+        public void onSuccess(List<Audio.Track> audioList) {
+            Log.d("AudioActivity", "OnSuccess");
+            if (audioList.size() > listAudio.size()) {
+                listAudio.clear();
+                listAudio.addAll(audioList);
+                adapter.notifyDataSetChanged();
+                adapter.setLoaded();
+                adapter.isLastLoaded = false;
+            } else {
+                adapter.isLastLoaded = true;
+                recyclerView.setPadding(0, 0, 0, 60);
+            }
+        }
+
+        @Override
+        public void onError() {
+            //listAudio.remove(listAudio.size() - 1);
+
+        }
+    };
 
     public void startLoginActivity() {
         Intent i = new Intent(getApplicationContext(), LoginActivity.class);
@@ -161,27 +219,50 @@ public class AudioActivity extends AppCompatActivity implements View.OnClickList
         return super.onOptionsItemSelected(item);
     }
 
+    public boolean canGoBack() {
+        if (positionInFragment == -1) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
     @Override
     public void onBackPressed() {
-        Log.d("TAG", "onBackPressed");
-        Intent i = new Intent(getApplicationContext(), LoginActivity.class);
-        int isOpenLogoutFragment = 2;
-        i.putExtra("date", isOpenLogoutFragment);
-        setResult(RESULT_OK, i);
-        finish();
+        Log.d("TAG  ", "onBackPressed");
+        if (detailsAudioFragment != null && canGoBack()) {
+            //recyclerView.setAdapter(adapter);
+            positionInFragment = -1;
+            getSupportFragmentManager()
+                    .beginTransaction()
+                    .hide(detailsAudioFragment)
+                    .commit();
+        } else {
+            Intent i = new Intent(getApplicationContext(), LoginActivity.class);
+            int isOpenLogoutFragment = 2;
+            i.putExtra("date", isOpenLogoutFragment);
+            setResult(RESULT_OK, i);
+            finish();
+        }
+
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        Log.d("TAG", "Destroy");
+        Log.d("TAG", "onDestroy");
         //stopService(playIntent);
-        isDestroy = true;
-        MediaPlayerControl.getInstance().isDestroyActivity(isDestroy);
-        AudioRecyclerAdapter.isPlayingAudio(false, true);
-        NotificationManager notificationManager = (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationManager.cancel(1);
-        MediaPlayerControl.getInstance().doUnbindService();
+        //isDestroy = true;
+        mediaPlayerLoader.removeCallback(mediaPlayerLoaderCallback);
+        //
+            /*mediaPlayerControl.unsubscribeToUpdatesFromMediaPlayerControl(this);
+            adapter.isPlayingAudio(false, true);
+            NotificationManager notificationManager = (NotificationManager) getApplicationContext()
+                    .getSystemService(Context.NOTIFICATION_SERVICE);
+            notificationManager.cancel(1);
+            mediaPlayerControl.updateCurrentPosition(INIT_CURRENT_POSITION);
+            MediaPlayerControl.getInstance().doUnbindService();
+            mediaPlayerLoader.removeCallback(mediaPlayerLoaderCallback);*/
     }
 
     @Override
@@ -190,6 +271,7 @@ public class AudioActivity extends AppCompatActivity implements View.OnClickList
     }
 
     public void initAdapter() {
+        Log.d("initAdapter", "true");
         adapter = new AudioRecyclerAdapter(this, R.layout.audio, listAudio, recyclerView);
         recyclerView.setAdapter(adapter);
     }
@@ -198,70 +280,50 @@ public class AudioActivity extends AppCompatActivity implements View.OnClickList
     public void updateUiByDismissNotification() {
         Log.d("onReceive", "updateUi");
         hideOrShowAudioView(View.INVISIBLE);
-        AudioRecyclerAdapter.isPlayingAudio(false, true);
+        adapter.isPlayingAudio(false, true);
         adapter.notifyDataSetChanged();
+        /*mediaPlayerControl.unsubscribeToUpdatesFromMediaPlayerControl(this);
+        NotificationManager notificationManager = (NotificationManager) getApplicationContext()
+                .getSystemService(Context.NOTIFICATION_SERVICE);
+        notificationManager.cancel(1);
+        mediaPlayerControl.updateCurrentPosition(INIT_CURRENT_POSITION);*/
     }
 
     @Override
     public void updateUiByToggle(boolean isPlaying) {
         playOrStopSong.setImageResource(!isPlaying ? R.drawable.ic_play_arrow_black_24dp : R.drawable.ic_pause_black_24dp);
-        AudioRecyclerAdapter.isPlayingAudio(isPlaying, false);
+        adapter.isPlayingAudio(isPlaying, false);
         adapter.notifyDataSetChanged();
     }
 
     @Override
-    public void playNextAudioByComplete(boolean isEnd, int isNextOrPrev) {
-        if (isEnd) {
-            if (iPos == 0) {
-                iPos = pressedPosition;
-            }
-            if (isNextOrPrev == 1) {
-                iPos = iPos + 1;
-            } else {
-                iPos = iPos - 1;
-            }
-            AudioRecyclerAdapter.setCurrentPosition(iPos);
-            updateUiByToggle(true);
-            setNameAndArtistAudio(iPos);
-            //adapter.notifyDataSetChanged();
-            MediaPlayerControl.getInstance().songPicked(listAudio, iPos);
+    public void updateUiByComplete(boolean isEnd, int isNextOrPrev) {
+        if (mediaPlayerControl.getCurrentPosition() + 1 >= listAudio.size()) {
+            mediaPlayerControl.updatePosition(mediaPlayerControl.INIT_POSITION);
         }
+        int position = mediaPlayerControl.getCurrentPosition();
+        Log.d("TAG", String.valueOf(position));
+        setNameAndArtistAudio(listAudio, position);
+        adapter.setCurrentPosition(position);
+        //updateUiByToggle(true);
+    }
+
+    @Override
+    public void setProgress(int position, int duration) {
+        mediaPlayerSetUi.setProgress(seekBar, position, duration);
     }
 
     @Override
     public void setSecondProgress(int percent) {
-        if (percent > currentPercent) {
-            int perc = percent * 10;
-            seekBar.setSecondaryProgress(perc);
-        }
-        currentPercent = percent;
+        mediaPlayerSetUi.setSecondProgress(seekBar, percent);
     }
 
     @Override
-    public int setProgress(int position, int duration) {
-        if (seekBar != null) {
-            if (duration > 0) {
-                long pos = 1000L * position / duration;
-                seekBar.setProgress((int) pos);
-            }
-        }
-        return position;
-    }
-
-    public static class AudioFragment extends android.support.v4.app.Fragment {
-
-        public AudioFragment() {
-            super();
-        }
-
-        @Override
-        public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                                 Bundle savedInstanceState) {
-            final View v = inflater.inflate(R.layout.fragment_audio, container, false);
-            return v;
-        }
+    public void setNameAndArtistAudio(List<Audio.Track> listAudio, int position) {
+        mediaPlayerSetUi.setNameAndArtistAudio(listAudio, position, nameAudio, artistAudio);
     }
 }
+
 
 
 
